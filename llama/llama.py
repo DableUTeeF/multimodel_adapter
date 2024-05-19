@@ -23,10 +23,10 @@ class ModelArgs:
     max_batch_size: int = 32
     max_seq_len: int = 2048
 
-    w_bias: bool = False # use bias tuning
-    w_lora: bool = False # use lora tuning
+    w_bias: bool = False  # use bias tuning
+    w_lora: bool = False  # use lora tuning
     lora_rank: int = 16
-    w_new_gate: bool = False # for compatibility
+    w_new_gate: bool = False  # for compatibility
 
 
 class RMSNorm(torch.nn.Module):
@@ -60,9 +60,9 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
 
 
 def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
+        xq: torch.Tensor,
+        xk: torch.Tensor,
+        freqs_cis: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
@@ -106,31 +106,30 @@ class Attention(nn.Module):
 
         self.w_lora = args.w_lora
         if args.w_lora:
-           self.lora_wq_l1 = Linear(args.dim, args.lora_rank, bias=False)
-           self.lora_wq_l2 = Linear(args.lora_rank, args.dim, bias=False)
+            self.lora_wq_l1 = Linear(args.dim, args.lora_rank, bias=False)
+            self.lora_wq_l2 = Linear(args.lora_rank, args.dim, bias=False)
 
-           self.lora_wk_l1 = Linear(args.dim, args.lora_rank, bias=False)
-           self.lora_wk_l2 = Linear(args.lora_rank, args.dim, bias=False)
+            self.lora_wk_l1 = Linear(args.dim, args.lora_rank, bias=False)
+            self.lora_wk_l2 = Linear(args.lora_rank, args.dim, bias=False)
 
-           self.lora_wv_l1 = Linear(args.dim, args.lora_rank, bias=False)
-           self.lora_wv_l2 = Linear(args.lora_rank, args.dim, bias=False)
+            self.lora_wv_l1 = Linear(args.dim, args.lora_rank, bias=False)
+            self.lora_wv_l2 = Linear(args.lora_rank, args.dim, bias=False)
 
-           self.lora_wo_l1 = Linear(args.dim, args.lora_rank, bias=False)
-           self.lora_wo_l2 = Linear(args.lora_rank, args.dim, bias=False)
-           nn.init.constant_(self.lora_wq_l2.weight.data, 0)
-           nn.init.constant_(self.lora_wk_l2.weight.data, 0)
-           nn.init.constant_(self.lora_wv_l2.weight.data, 0)
-           nn.init.constant_(self.lora_wo_l2.weight.data, 0)
+            self.lora_wo_l1 = Linear(args.dim, args.lora_rank, bias=False)
+            self.lora_wo_l2 = Linear(args.lora_rank, args.dim, bias=False)
+            nn.init.constant_(self.lora_wq_l2.weight.data, 0)
+            nn.init.constant_(self.lora_wk_l2.weight.data, 0)
+            nn.init.constant_(self.lora_wv_l2.weight.data, 0)
+            nn.init.constant_(self.lora_wo_l2.weight.data, 0)
 
         self.cache_k = None
         self.cache_v = None
 
         self.gate = torch.nn.Parameter(torch.zeros(1, self.n_local_heads, 1, 1))
-        
+
         self.w_new_gate = args.w_new_gate
         if args.w_new_gate:
             self.new_gate = torch.nn.Parameter(torch.ones(1, 1, 1, 1))
-
 
     def train(self, mode: bool = True):
         if mode:
@@ -145,14 +144,13 @@ class Attention(nn.Module):
             ).cuda()
         return super().train(mode)
 
-
     def forward(self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor], adapter=None):
         bsz, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
         if self.w_lora:
-           xq = xq + self.lora_wq_l2(self.lora_wq_l1(x))
-           xk = xk + self.lora_wk_l2(self.lora_wk_l1(x))
-           xv = xv + self.lora_wv_l2(self.lora_wv_l1(x))
+            xq = xq + self.lora_wq_l2(self.lora_wq_l1(x))
+            xk = xk + self.lora_wk_l2(self.lora_wk_l1(x))
+            xv = xv + self.lora_wv_l2(self.lora_wv_l1(x))
 
         xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
         xk = xk.view(bsz, seqlen, self.n_local_heads, self.head_dim)
@@ -164,13 +162,13 @@ class Attention(nn.Module):
             self.cache_k = self.cache_k.to(xq)
             self.cache_v = self.cache_v.to(xq)
 
-            self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-            self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
+            self.cache_k[:bsz, start_pos: start_pos + seqlen] = xk
+            self.cache_v[:bsz, start_pos: start_pos + seqlen] = xv
 
             keys = self.cache_k[:bsz, : start_pos + seqlen]
             values = self.cache_v[:bsz, : start_pos + seqlen]
         else:
-            assert start_pos==0
+            assert start_pos == 0
             keys = xk
             values = xv
 
@@ -182,7 +180,6 @@ class Attention(nn.Module):
             if adapter_len > 1:
                 adapter_k = self.wk(adapter).view(bsz, adapter_len, self.n_local_heads, self.head_dim)
                 adapter_k = adapter_k.transpose(1, 2)
-
 
         xq = xq.transpose(1, 2)
         keys = keys.transpose(1, 2)
@@ -210,18 +207,18 @@ class Attention(nn.Module):
         ).contiguous().view(bsz, seqlen, -1)
 
         if self.w_lora:
-           return self.wo(output) + self.lora_wo_l2(self.lora_wo_l1(output))
+            return self.wo(output) + self.lora_wo_l2(self.lora_wo_l1(output))
         else:
-           return self.wo(output)
+            return self.wo(output)
 
 
 class FeedForward(nn.Module):
     def __init__(
-        self,
-        dim: int,
-        hidden_dim: int,
-        multiple_of: int,
-        args: ModelArgs
+            self,
+            dim: int,
+            hidden_dim: int,
+            multiple_of: int,
+            args: ModelArgs
     ):
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
@@ -243,22 +240,22 @@ class FeedForward(nn.Module):
 
         self.w_lora = args.w_lora
         if args.w_lora:
-           self.lora_w1_l1 = Linear(dim, args.lora_rank, bias=False)
-           self.lora_w1_l2 = Linear(args.lora_rank, hidden_dim, bias=False)
-           self.lora_w2_l1 = Linear(hidden_dim, args.lora_rank, bias=False)
-           self.lora_w2_l2 = Linear(args.lora_rank, dim, bias=False)
-           self.lora_w3_l1 = Linear(dim, args.lora_rank, bias=False)
-           self.lora_w3_l2 = Linear(args.lora_rank, hidden_dim, bias=False)
-           nn.init.constant_(self.lora_w1_l2.weight.data, 0)
-           nn.init.constant_(self.lora_w2_l2.weight.data, 0)
-           nn.init.constant_(self.lora_w3_l2.weight.data, 0)
+            self.lora_w1_l1 = Linear(dim, args.lora_rank, bias=False)
+            self.lora_w1_l2 = Linear(args.lora_rank, hidden_dim, bias=False)
+            self.lora_w2_l1 = Linear(hidden_dim, args.lora_rank, bias=False)
+            self.lora_w2_l2 = Linear(args.lora_rank, dim, bias=False)
+            self.lora_w3_l1 = Linear(dim, args.lora_rank, bias=False)
+            self.lora_w3_l2 = Linear(args.lora_rank, hidden_dim, bias=False)
+            nn.init.constant_(self.lora_w1_l2.weight.data, 0)
+            nn.init.constant_(self.lora_w2_l2.weight.data, 0)
+            nn.init.constant_(self.lora_w3_l2.weight.data, 0)
 
     def forward(self, x):
         if self.w_lora:
-           out = F.silu(self.w1(x) + self.lora_w1_l2(self.lora_w1_l1(x))) * (self.w3(x) + self.lora_w3_l2(self.lora_w3_l1(x)))
-           return self.w2(out) + self.lora_w2_l2(self.lora_w2_l1(out))
+            out = F.silu(self.w1(x) + self.lora_w1_l2(self.lora_w1_l1(x))) * (self.w3(x) + self.lora_w3_l2(self.lora_w3_l1(x)))
+            return self.w2(out) + self.lora_w2_l2(self.lora_w2_l1(out))
         else:
-           return self.w2(F.silu(self.w1(x)) * self.w3(x))
+            return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
 class TransformerBlock(nn.Module):
@@ -276,7 +273,6 @@ class TransformerBlock(nn.Module):
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
     def forward(self, x: torch.Tensor, start_pos: int, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor], prompt=None):
-
         h = x + self.attention.forward(self.attention_norm(x), start_pos, freqs_cis, mask, prompt)
         out = h + self.feed_forward.forward(self.ffn_norm(h))
         return out
@@ -310,7 +306,7 @@ class Transformer(nn.Module):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         self.freqs_cis = self.freqs_cis.to(h.device)
-        freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
+        freqs_cis = self.freqs_cis[start_pos: start_pos + seqlen]
 
         mask = None
         if seqlen > 1:
