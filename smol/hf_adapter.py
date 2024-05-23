@@ -368,6 +368,14 @@ class HF_adapter(nn.Module):
             c_loss = self.criterion(output.reshape(-1, self.model.vocab_size), labels.flatten())
         return c_loss, c_loss
 
+    @torch.inference_mode()
+    def forward_inference(self):
+        pass
+
+    @torch.inference_mode()
+    def generate(self):
+        pass
+
 
 LlamaMLP.__init__ = llmlp_init
 LlamaDecoderLayer.forward = llama_layer_fwd

@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
-from llama.llama_adapter import LLaMA_adapter
+from smol.hf_adapter import HF_adapter
 
 from data.dataset import PretrainDataset, transform_train
 
@@ -102,7 +102,7 @@ def main(args):
     llama_type = args.llama_type
     llama_ckpt_dir = os.path.join(args.llama_path, llama_type)
     llama_tokenzier_path = os.path.join(args.llama_path, 'tokenizer.model')
-    model = LLaMA_adapter(llama_ckpt_dir, llama_tokenzier_path, phase="pretrain")
+    model = HF_adapter('/project/lt200203-aimedi/palm/huggingface/Meta-Llama-3-8B-Instruct', phase="pretrain")
 
     model.to(device)
 
