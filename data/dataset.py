@@ -103,19 +103,21 @@ class PretrainDataset(Dataset):
             self.config = yaml.load(f, Loader=yaml.FullLoader)
         print("DATASET CONFIG:")
         print(self.config)
-        images, captions = [], []
+        images, captions, languages = [], [], []
         for meta_path in self.config['META']:
-            images_this_meta, captions_this_meta = [], []
+            images_this_meta, captions_this_meta, languages_this_meta = [], [], []
             for chunk in pd.read_csv(meta_path, sep='\t', lineterminator='\n', chunksize=10 ** 6):
                 images_this_meta.extend(chunk['url'].tolist())
                 captions_this_meta.extend(chunk['caption'].tolist())
+                languages_this_meta.extend(chunk['language'].tolist())
             print(f"{meta_path}: len {len(images_this_meta)}")
             images.extend(images_this_meta)
             captions.extend(captions_this_meta)
+            languages.extend(languages_this_meta)
 
         self.data_list = []
-        for x, y in zip(images, captions):
-            self.data_list.append({'url': x, 'caption': y})
+        for x, y, z in zip(images, captions, languages):
+            self.data_list.append({'url': x, 'caption': y, 'language': z})
         print(f"total length: {len(self)}")
         self.transform = transform
         self.max_words = max_words
@@ -126,7 +128,7 @@ class PretrainDataset(Dataset):
 
     def __getitem__(self, index):
         sample = self.data_list[index]
-        image_path, caption = sample['url'], sample['caption']
+        image_path, caption, language = sample['url'], sample['caption'], sample['language']
         if isinstance(caption, list):
             caption = random.choice(caption)
         caption = str(caption)
@@ -135,7 +137,7 @@ class PretrainDataset(Dataset):
         image = Image.fromarray(image)
         image = self.transform(image)
 
-        format_instruction = "Generate caption of this image"
+        format_instruction = {'en': "Generate caption of this image", 'th': 'สร้างคำบรรยายของภาพนี้'}[language]
         input1 = llama.utils.format_prompt(format_instruction, None)
         input2 = input1 + caption
 
