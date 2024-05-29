@@ -369,8 +369,72 @@ class HF_adapter(nn.Module):
         return c_loss, c_loss
 
     @torch.inference_mode()
-    def forward_inference(self):
-        pass
+    def forward_inference(self, visual_query, input_ids, start_pos):
+        batch_size, seq_length = input_ids.shape[:2]
+
+        attention_mask = _prepare_4d_causal_attention_mask(
+            None, (batch_size, seq_length), None, None
+        )
+        position_ids = torch.arange(
+            0, seq_length + 0, dtype=torch.long, device=input_ids.device
+        )
+        position_ids = position_ids.unsqueeze(0)
+        inputs_embeds = self.model.model.embed_tokens(input_ids)
+        hidden_states = inputs_embeds
+        for decoder_layer in self.model.model.layers[:-1 * self.query_layer]:
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
+                    None,
+                    False,
+                    False,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=None,
+                    output_attentions=False,
+                    use_cache=False,
+                )
+            hidden_states = layer_outputs[0]
+
+        adapter = self.adapter_query.weight.reshape(self.query_layer, self.query_len, -1).unsqueeze(1)
+        adapter_index = 0
+
+        for decoder_layer in self.model.model.layers[-1 * self.query_layer:]:
+            dynamic_adapter = adapter[adapter_index].repeat(batch_size, 1, 1)
+            dynamic_adapter = dynamic_adapter + visual_query
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    position_ids,
+                    None,
+                    False,
+                    True,
+                    dynamic_adapter
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=None,
+                    output_attentions=False,
+                    use_cache=True,
+                    adapter=dynamic_adapter
+                )
+            hidden_states = layer_outputs[0]
+        hidden_states = self.model.norm(hidden_states)
+        output = self.model.lm_head(hidden_states)
+        output = output[:, :-1, :]
+        return output.float()
 
     @torch.inference_mode()
     def generate(self):
